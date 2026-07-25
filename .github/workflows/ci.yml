@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [main]
@@ -9,7 +8,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -26,11 +24,11 @@ jobs:
         run: |
           cd backend
           uv sync
-          
+
       - name: Run tests
         run: |
           cd backend
-          pytest tests/ -v --tb=short
+          uv run pytest tests/ -v --tb=short
         env:
           DATABASE_URL: sqlite:///./test.db
           GROQ_API_KEY: test-key-not-real
