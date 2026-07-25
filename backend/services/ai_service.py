@@ -28,7 +28,7 @@ def classify_document(extracted_text: str) -> DocumentClassification:
 
         chain = prompt | llm | parser
         result = chain.invoke({"text": extracted_text[:3000]})
-        return DocumentClassification(**result)
+        return DocumentClassification.model_validate(result)
 
     except Exception:
         return DocumentClassification(
@@ -73,7 +73,7 @@ def detect_anomalies(documents_context: str, company_name: str) -> list[AnomalyI
             "company_name": company_name,
             "documents": documents_context
         })
-        return [AnomalyItem(**item) for item in result]
+        return [AnomalyItem.model_validate(item) for item in result]
 
     except Exception:
         return []

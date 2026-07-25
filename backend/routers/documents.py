@@ -3,19 +3,17 @@ import uuid
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Cookie, BackgroundTasks
 from sqlalchemy.orm import Session
-import pdfplumber
-import io
 
 from db.database import get_db
-from models.document import Document
-from models.company import Company
+from models import Document, Company
 from schemas.document import DocumentResponse, DocumentUploadResponse
-from services.ai_service import classify_document  
+from services.document_service import process_document
 
 router = APIRouter(
     prefix="/documents",
     tags=["documents"]
 )
+
 
 def get_session_id(session_id: Optional[str] = Cookie(None)) -> str:
     if session_id is None:
@@ -24,66 +22,6 @@ def get_session_id(session_id: Optional[str] = Cookie(None)) -> str:
             detail="No session found. Please create a company first."
         )
     return session_id
-
-
-def extract_text_from_pdf(file_bytes: bytes) -> str:
-    """
-    Parses a PDF and extracts all text content.
-    Uses pdfplumber — reliable for text-based PDFs.
-    For scanned PDFs (images), OCR would be needed (future improvement).
-    """
-    text = ""
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    return text.strip()
-
-
-def process_document_in_background(
-    document_id: str,
-    file_bytes: bytes,
-    db: Session
-):
-    """
-    This runs in the background after the upload endpoint returns.
-    Steps:
-    1. Extract text from PDF
-    2. Send text to LLM for classification
-    3. Save results to database
-    4. Update processing_status to "processed" or "failed"
-    """
-    # Get the document from DB
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        return
-
-    try:
-        # Step 1 — Parse PDF and extract raw text
-        document.processing_status = "processing"
-        db.commit()
-
-        extracted_text = extract_text_from_pdf(file_bytes)
-        document.extracted_text = extracted_text
-
-        # Step 2 — Send to AI for classification and field extraction
-        # classify_document returns a dict with type, category, and extracted fields
-        ai_result = classify_document(extracted_text)
-
-        # Step 3 — Save classification result
-        document.category = ai_result.get("category", "audit")
-        document.processing_status = "processed"
-        db.commit()
-
-        # Step 4 — Save to the correct child table based on category
-        # (we'll add this logic when we build the AI service)
-
-    except Exception as e:
-        # If anything fails, mark as failed so the user knows
-        document.processing_status = "failed"
-        db.commit()
-        print(f"Document processing failed: {e}")
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -95,8 +33,8 @@ async def upload_document(
 ):
     """
     Uploads a document (PDF or image).
-    Returns immediately with a document ID and "pending" status.
-    AI processing happens in the background.
+    Returns immediately with document ID and pending status.
+    AI processing (classification, anomaly detection) happens in background.
     """
     # Validate file type
     if not file.filename.endswith((".pdf", ".png", ".jpg", ".jpeg")):
@@ -113,7 +51,7 @@ async def upload_document(
             detail="No company found for this session. Please create a company first."
         )
 
-    # Read file bytes — we need them for parsing
+    # Read file bytes — needed for background processing
     file_bytes = await file.read()
 
     # Check if this filename was already uploaded for this company
@@ -123,30 +61,29 @@ async def upload_document(
     ).first()
 
     if existing:
-        # File already exists — update it instead of creating a new one
+        # File exists — reset and reprocess
         existing.processing_status = "pending"
-        existing.extracted_text = None  # will be re-extracted
+        existing.extracted_text = None
         db.commit()
         document = existing
         message = f"Document '{file.filename}' already existed — reprocessing with new version."
     else:
-        # New document — create a fresh record
+        # New document — create fresh record
         document = Document(
             id=str(uuid.uuid4()),
             company_id=company.id,
             filename=file.filename,
-            category="unknown",          # AI will determine this in background
-            processing_status="pending"  # will be updated by background task
+            category="unknown",
+            processing_status="pending"
         )
         db.add(document)
         db.commit()
         db.refresh(document)
-        message = f"Document '{file.filename}' uploaded successfully. AI processing started."
+        message = f"Document '{file.filename}' uploaded. AI processing started."
 
-    # Start AI processing in the background — don't make the user wait
-    # BackgroundTasks runs after the response is sent to the client
+    # Start background processing — returns immediately to user
     background_tasks.add_task(
-        process_document_in_background,
+        process_document,
         document_id=document.id,
         file_bytes=file_bytes,
         db=db
@@ -166,8 +103,8 @@ def get_document_status(
 ):
     """
     Returns the current processing status of a document.
-    Frontend polls this endpoint every 2-3 seconds after upload
-    until status is "processed" or "failed".
+    Frontend polls this every 2-3 seconds after upload
+    until status is 'processed' or 'failed'.
     """
     document = db.query(Document).filter(Document.id == document_id).first()
 
@@ -187,9 +124,7 @@ def get_all_documents(
     session_id: str = Depends(get_session_id),
     db: Session = Depends(get_db)
 ):
-    """
-    Returns all documents for the current session's company.
-    """
+    """Returns all documents for the current session's company."""
     company = db.query(Company).filter(Company.session_id == session_id).first()
     if not company:
         raise HTTPException(status_code=404, detail="No company found for this session")
@@ -206,10 +141,7 @@ def get_document(
     document_id: str,
     db: Session = Depends(get_db)
 ):
-    """
-    Returns a single document by ID including extracted text and category.
-    Only useful after processing_status = "processed".
-    """
+    """Returns a single document by ID."""
     document = db.query(Document).filter(Document.id == document_id).first()
 
     if not document:
