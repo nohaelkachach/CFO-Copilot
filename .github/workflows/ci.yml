@@ -33,6 +33,6 @@ jobs:
           uv run pytest tests/ -v --tb=short
         env:
           DATABASE_URL: sqlite:///./test.db
-          GROQ_API_KEY: test-key-not-real
+          OPENAI_API_KEY: test-key-not-real
           ALLOWED_ORIGINS: http://localhost:3000
           PYTHONPATH: .
