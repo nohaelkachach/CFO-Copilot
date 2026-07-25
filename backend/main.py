@@ -3,9 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import settings
 from routers import all_routers
 from db.database import create_tables
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    create_tables()
+    yield
+
 # Initialize the FastAPI application
 app = FastAPI(
     title="CFO Copilot",
+    lifespan=lifespan,
     description="AI-powered financial intelligence platform for SMEs",
     version="1.0.0",
     docs_url="/docs",       # Swagger UI — visit http://localhost:8080/docs to test your API

@@ -33,6 +33,6 @@ jobs:
           uv run pytest tests/ -v --tb=short
         env:
           DATABASE_URL: sqlite:///./test.db
-          OPENAI_API_KEY: test-key-not-real
+          GEMINI_API_KEY: test-key-not-real
           ALLOWED_ORIGINS: http://localhost:3000
           PYTHONPATH: .
