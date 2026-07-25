@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional, List
 
 from db.database import get_db
-from models.anomaly import Anomaly
+from models.anomalies import Anomaly
 from models.company import Company
 from schemas.anomaly import AnomalyResponse, AnomalyResolve
 
