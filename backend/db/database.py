@@ -11,7 +11,7 @@ from core.config import settings
 # can handle multiple requests concurrently across different threads
 engine = create_engine(
     settings.DATABASE_URL,
-    connect_args={"check_same_thread": False}  # SQLite only — remove for PostgreSQL
+    
 )
 
 # SessionLocal = a factory that creates database sessions
