@@ -1,20 +1,12 @@
 # core/llm.py
-# LLM client using LangChain with Google Gemini Flash
-# Using LangChain allows easy model switching and built-in output parsers
-
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from core.config import settings
 
-MODEL = "gemini-2.0-flash"
+MODEL = "llama-3.3-70b-versatile"
 
 def get_llm():
-    """
-    Returns a LangChain-wrapped Gemini Flash model.
-    temperature=0 ensures deterministic, consistent outputs.
-    Called fresh each time to avoid stale connections.
-    """
-    return ChatGoogleGenerativeAI(
+    return ChatGroq(
         model=MODEL,
-        google_api_key=settings.GEMINI_API_KEY,
+        api_key=settings.GEMINI_API_KEY,  # variable kept, but now holds Groq key
         temperature=0
     )

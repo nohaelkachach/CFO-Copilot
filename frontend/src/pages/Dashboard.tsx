@@ -1,6 +1,12 @@
 // src/pages/Dashboard.tsx
 import { useState, useEffect } from 'react'
-import { getPnLOverview, getLatestBalanceSheet, getUnresolvedCount, getMyCompany } from '../services/api'
+import {
+  getPnLOverview,
+  getLatestBalanceSheet,
+  getUnresolvedCount,
+  getMyCompany,
+  getCashFlow
+} from '../services/api'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import KPICard from '../components/dashboard/KPICard'
 import PnLChart from '../components/dashboard/PnLChart'
@@ -19,16 +25,18 @@ function Dashboard() {
     async function loadData() {
       try {
         setLoading(true)
-        const [pnlRes, balanceRes, anomalyRes, companyRes] = await Promise.allSettled([
+        const [pnlRes, balanceRes, anomalyRes, companyRes, cashRes] = await Promise.allSettled([
           getPnLOverview(),
           getLatestBalanceSheet(),
           getUnresolvedCount(),
           getMyCompany(),
+          getCashFlow(),
         ])
         if (pnlRes.status === "fulfilled") setPnlData(pnlRes.value.data)
         if (balanceRes.status === "fulfilled") setBalanceSheet(balanceRes.value.data)
         if (anomalyRes.status === "fulfilled") setAnomalyCount(anomalyRes.value.data.unresolved_count)
         if (companyRes.status === "fulfilled") setCompany(companyRes.value.data)
+        if (cashRes.status === "fulfilled") setCashFlowData(cashRes.value.data)
       } finally {
         setLoading(false)
       }
@@ -129,28 +137,16 @@ function Dashboard() {
           ) : (
             <div className="flex flex-col gap-4">
               <div className="p-4 bg-blue-50 rounded-xl">
-                <p className="text-xs text-blue-500 font-semibold uppercase tracking-wide mb-1">
-                  Assets
-                </p>
-                <p className="text-xl font-bold text-blue-700">
-                  {formatMAD(balanceSheet.total_assets)}
-                </p>
+                <p className="text-xs text-blue-500 font-semibold uppercase tracking-wide mb-1">Assets</p>
+                <p className="text-xl font-bold text-blue-700">{formatMAD(balanceSheet.total_assets)}</p>
               </div>
               <div className="p-4 bg-red-50 rounded-xl">
-                <p className="text-xs text-red-500 font-semibold uppercase tracking-wide mb-1">
-                  Liabilities
-                </p>
-                <p className="text-xl font-bold text-red-700">
-                  {formatMAD(balanceSheet.total_liabilities)}
-                </p>
+                <p className="text-xs text-red-500 font-semibold uppercase tracking-wide mb-1">Liabilities</p>
+                <p className="text-xl font-bold text-red-700">{formatMAD(balanceSheet.total_liabilities)}</p>
               </div>
               <div className="p-4 bg-green-50 rounded-xl">
-                <p className="text-xs text-green-500 font-semibold uppercase tracking-wide mb-1">
-                  Equity
-                </p>
-                <p className="text-xl font-bold text-green-700">
-                  {formatMAD(balanceSheet.equity)}
-                </p>
+                <p className="text-xs text-green-500 font-semibold uppercase tracking-wide mb-1">Equity</p>
+                <p className="text-xl font-bold text-green-700">{formatMAD(balanceSheet.equity)}</p>
               </div>
             </div>
           )}
@@ -167,9 +163,9 @@ function Dashboard() {
       {/* Quick actions */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { to: "/upload",    label: "Upload Document",  desc: "Add financial documents",                              emoji: "📄" },
+          { to: "/upload", label: "Upload Document", desc: "Add financial documents", emoji: "📄" },
           { to: "/anomalies", label: "Review Anomalies", desc: `${anomalyCount} item${anomalyCount !== 1 ? 's' : ''} to review`, emoji: "⚠️" },
-          { to: "/chat",      label: "Ask AI",           desc: "Query your finances",                                  emoji: "💬" },
+          { to: "/chat", label: "Ask AI", desc: "Query your finances", emoji: "💬" },
         ].map(action => (
           <Link
             key={action.to}
@@ -177,9 +173,7 @@ function Dashboard() {
             className="bg-white rounded-2xl border border-gray-100 p-5 hover:shadow-md hover:border-slate-200 transition-all group"
           >
             <span className="text-2xl mb-3 block">{action.emoji}</span>
-            <p className="font-semibold text-gray-900 group-hover:text-slate-700">
-              {action.label}
-            </p>
+            <p className="font-semibold text-gray-900 group-hover:text-slate-700">{action.label}</p>
             <p className="text-sm text-gray-400 mt-0.5">{action.desc}</p>
           </Link>
         ))}

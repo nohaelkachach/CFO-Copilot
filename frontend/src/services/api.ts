@@ -50,4 +50,7 @@ export const resolveAnomaly = (id: string) =>
 export const askQuestion = (question: string, documentId?: string) =>
   api.post('/chat/', { question, document_id: documentId })
 
+export const getCashFlow = () =>
+  api.get('/bank-statements/cash-flow')
+
 export default api

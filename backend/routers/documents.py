@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Cookie, BackgroundTasks
 from sqlalchemy.orm import Session
 
-from db.database import get_db
+from db.database import get_db, SessionLocal
 from models import Document, Company
 from schemas.document import DocumentResponse, DocumentUploadResponse
 from services.document_service import process_document
@@ -22,6 +22,21 @@ def get_session_id(session_id: Optional[str] = Cookie(None)) -> str:
             detail="No session found. Please create a company first."
         )
     return session_id
+
+
+def run_process_document(document_id: str, file_bytes: bytes):
+    """
+    Creates its own database session for background processing.
+    Cannot reuse the request's session — it's already closed by the time
+    background tasks run. This is a common FastAPI pattern for background tasks.
+    """
+    db = SessionLocal()
+    try:
+        process_document(document_id, file_bytes, db)
+    except Exception as e:
+        print(f"Background task error: {e}")
+    finally:
+        db.close()
 
 
 @router.post("/upload", response_model=DocumentUploadResponse)
@@ -81,12 +96,11 @@ async def upload_document(
         db.refresh(document)
         message = f"Document '{file.filename}' uploaded. AI processing started."
 
-    # Start background processing — returns immediately to user
+    # Start background processing with its own DB session
     background_tasks.add_task(
-        process_document,
+        run_process_document,
         document_id=document.id,
-        file_bytes=file_bytes,
-        db=db
+        file_bytes=file_bytes
     )
 
     return DocumentUploadResponse(

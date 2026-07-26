@@ -3,6 +3,8 @@
 # Connects AI classification directly to database persistence
 
 import uuid
+import pdfplumber
+import io
 from sqlalchemy.orm import Session
 
 from models import (
@@ -24,9 +26,6 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
     Uses pdfplumber — reliable for text-based PDFs.
     For scanned/image PDFs, OCR would be needed (future improvement).
     """
-    import pdfplumber
-    import io
-
     text = ""
     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
         for page in pdf.pages:
@@ -50,43 +49,49 @@ def process_document(
     3. Save classification to correct child table
     4. Detect anomalies and save them
     5. Update processing status
-
-    This function is called by the background task in the documents router.
     """
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
+        print(f"ERROR: Document {document_id} not found")
         return
 
     try:
-        # Step 1 — Mark as processing so frontend knows work is in progress
+        # Step 1 — Mark as processing
         document.processing_status = "processing"
         db.commit()
+        print(f"STEP 1: Processing started for {document.filename}")
 
-        # Step 2 — Extract raw text from PDF
+        # Step 2 — Extract text from PDF
         extracted_text = extract_text_from_pdf(file_bytes)
+        print(f"STEP 2: Extracted {len(extracted_text)} characters")
         document.extracted_text = extracted_text
         db.commit()
 
         # Step 3 — Classify with AI
         classification = classify_document(extracted_text)
+        print(f"STEP 3: Classification — category={classification.category} | type={classification.type} | revenue={classification.revenue} | expenses={classification.expenses} | net_profit={classification.net_profit}")
         document.category = classification.category
         db.commit()
 
-        # Step 4 — Save to the correct child table based on classification
+        # Step 4 — Save to correct child table
         _save_to_child_table(db, document, classification)
+        print(f"STEP 4: Saved to child table")
 
         # Step 5 — Detect and save anomalies
         _detect_and_save_anomalies(db, document)
+        print(f"STEP 5: Anomaly detection complete")
 
         # Step 6 — Mark as complete
         document.processing_status = "processed"
         db.commit()
+        print(f"STEP 6: Done — {document.filename} processed successfully")
 
     except Exception as e:
-        # If anything fails, mark as failed so the user knows
+        import traceback
+        print(f"PROCESSING FAILED: {e}")
+        print(traceback.format_exc())
         document.processing_status = "failed"
         db.commit()
-        print(f"Document processing failed for {document_id}: {e}")
 
 
 def _save_to_child_table(
@@ -114,20 +119,27 @@ def _save_to_child_table(
 
         elif classification.type == "bank_statement":
             statement = BankStatement(
-                id=str(uuid.uuid4()),
-                document_id=document.id,
-                period=classification.period,
-            )
+               id=str(uuid.uuid4()),
+               document_id=document.id,
+               period=classification.period,
+               closing_balance=classification.closing_balance,
+    )
             db.add(statement)
 
-        # contract, receipt, payslip — stored as document only, no child table needed
+        # contract, receipt, payslip — stored as document only
 
     elif classification.category == "financial_statement":
+        # Single block with ALL financial fields
         statement = FinancialStatement(
             id=str(uuid.uuid4()),
             document_id=document.id,
-            type=classification.type,    # PnL | balance_sheet | cash_flow | budget
+            type=classification.type,
             period=classification.period,
+            revenue=classification.revenue,
+            expenses=classification.expenses,
+            net_profit=classification.net_profit,
+            total_assets=classification.total_assets,
+            total_liabilities=classification.total_liabilities,
         )
         db.add(statement)
 
@@ -135,7 +147,7 @@ def _save_to_child_table(
         tax = TaxDocument(
             id=str(uuid.uuid4()),
             document_id=document.id,
-            type=classification.type,    # TVA | IS | CNSS | IR
+            type=classification.type,
             period=classification.period,
             amount_due=classification.amount,
             status="unpaid"
@@ -157,19 +169,16 @@ def _detect_and_save_anomalies(
     if not document.extracted_text:
         return
 
-    # Get company name for context in the AI prompt
     company = db.query(Company).filter(
         Company.id == document.company_id
     ).first()
     company_name = company.name if company else "Unknown Company"
 
-    # Run anomaly detection
     anomalies = detect_anomalies(
         documents_context=document.extracted_text,
         company_name=company_name
     )
 
-    # Save each anomaly to the database
     for anomaly_item in anomalies:
         anomaly = Anomaly(
             id=str(uuid.uuid4()),

@@ -7,7 +7,6 @@ from pydantic import BaseModel, Field
 
 
 class DocumentClassification(BaseModel):
-    """Structured output from document classification."""
     category: str = Field(description="financial_statement | tax | audit")
     type: str = Field(description="PnL | balance_sheet | invoice | TVA etc")
     period: Optional[str] = Field(default=None)
@@ -19,7 +18,13 @@ class DocumentClassification(BaseModel):
     invoice_number: Optional[str] = Field(default=None)
     direction: Optional[str] = Field(default=None)
     confidence: float = Field(default=0.0, ge=0, le=1)
-
+    # Financial statement specific fields
+    revenue: Optional[float] = Field(default=None)
+    expenses: Optional[float] = Field(default=None)
+    net_profit: Optional[float] = Field(default=None)
+    total_assets: Optional[float] = Field(default=None)
+    total_liabilities: Optional[float] = Field(default=None)
+    closing_balance: Optional[float] = Field(default=None)
 
 class AnomalyItem(BaseModel):
     """A single anomaly detected by the AI auditor."""

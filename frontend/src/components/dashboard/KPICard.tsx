@@ -27,7 +27,7 @@ function KPICard({ title, value, subtitle, color = "blue" }: KPICardProps) {
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">
         {title}
       </p>
-      <p className={`text-3xl font-bold ${texts[color]} mb-1`}>
+      <p className={`text-xl font-bold ${texts[color]} mb-1 break-all`}>
         {value}
       </p>
       {subtitle && (
