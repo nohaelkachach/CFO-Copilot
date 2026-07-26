@@ -51,7 +51,7 @@ def test_classify_document_handles_failure_gracefully():
         result = classify_document("some text")
 
         # Should return defaults, not crash
-        assert result.category == "audit"
+        assert result.category == "unknown"
         assert result.type == "other"
         assert result.confidence == 0.0
 
